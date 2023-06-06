@@ -68,9 +68,3 @@ app.use('/chat-service/', indexRouter);
 
 sslServer.listen(3443, () => console.log('secure server run on port 3443'))
 module.exports = app;
-
-// const io = require("socket.io")(8080, {
-//     cors: {
-//         origin: "http://localhost:3002"
-//     }
-// })
