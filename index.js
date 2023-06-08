@@ -1,61 +1,61 @@
 require('dotenv').config();
-const express = require('express'); 
-const path = require('path');
-const https = require('https')
-const fs = require('fs')
 const { Server } = require("socket.io");
-const cors = require("cors");
-const indexRouter = require('./routes/index');
+const { PROXY_CLIENT_URL, SERVER } = process.env
 
-const app = express();
-const sslServer = https.createServer({
-    key: fs.readFileSync(path.join(__dirname, 'cert', 'key.pem')),
-    cert: fs.readFileSync(path.join(__dirname, 'cert', 'cert.pem')),
-}, app)
+const io = new Server({ cors: PROXY_CLIENT_URL });
 
+//=========== users online ===========
+let users = []      
 
-const io = new Server(sslServer, {
-    cors: {
-        origin: 'http://localhost:3000'
-    }
-});
-
-let users = []
-const addUser = (userId, socketId) => {
+//========= function operate =======
+//add user
+const addUser = (userId, socketId) => { 
     !users.some((user) => user.userId === userId) &&
         users.push({ userId, socketId })
 }
-
+//remove user
 const removeUser = (socketId) => {
     users = users.filter((user) => user.socketId !== socketId)
 }
-
+//get user online
 const getUser = (userId) => {
     return users.find((user) => user.userId === userId);
 };
 
+//========== socket connection ===============
 io.on("connection", (socket) => {
     console.log('a user connected')
     io.emit("word", "welcome from the server!")
 
-    socket.on("addUser", (userId) => {      //===== add user to room
-        console.log(userId, 'from client')
+    //===== add user to room ==
+    socket.on("addUser", (userId) => {        // take event from client
+        console.log(userId, 'add user from client')
         addUser(userId, socket.id)
-        io.emit("getUsers", users)
+        io.emit("getUsers", users)          // send users data to client
     })
 
-    //send and get message
+    //===== send and get message + notification =====
     socket.on("sendMessage", ({ senderId, receiverId, text }) => {
-        // console.log(senderId, receiverId, text, 'user');
-        const user = getUser(receiverId);
+        console.log(senderId, receiverId, text, 'message data from client');
+        const user = getUser(receiverId);   //=== check user online ======
 
-        user && io.to(user.socketId).emit("getMessage", {
-            senderId,
-            text,
-        });
+        if (user) {
+            io.to(user.socketId).emit("getMessage", {   //======= send get message to client ==========
+                senderId,
+                text,
+            });
+            io.to(user.socketId).emit("getNotification", {   //======= send notification to client ==========
+                senderId: senderId,
+                isRead: false,
+            });
+        }else{
+            console.log('user tidak online');
+            //disini bisa untuk menyimpan data post ke api
+        }
+
     });
 
-    //disconnect remove user
+    //==== disconnect remove user ====
     socket.on("disconnect", () => {
         console.log("user disconnect")
         removeUser(socket.id)
@@ -63,8 +63,5 @@ io.on("connection", (socket) => {
     })
 })
 
-app.use(cors());
-app.use('/chat-service/', indexRouter);
 
-sslServer.listen(3443, () => console.log('secure server run on port 3443'))
-module.exports = app;
+io.listen(SERVER)
